@@ -23,3 +23,9 @@ source lg-env/Scripts/activate
 ```bash
 pip install -r requirements.txt
 ```
+
+4. Within the `Studio` directory, run:
+
+```
+langgrapg dev
+```
