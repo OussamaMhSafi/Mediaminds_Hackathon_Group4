@@ -105,20 +105,7 @@ def describe_image(state: ImageClassificationState) -> ImageClassificationState:
             history=state.history + [{"role": "system", "content": f"Error: {str(e)}"}],
             sources=state.sources
         )
-
-# Function to format the final output, may not be necessary
-def format_output(state: ImageClassificationState) -> ImageClassificationState:
-    
-    return ImageClassificationState(
-        image=state.image,
-        image_data=state.image_data,
-        description=state.description,
-        history=state.history + [{
-            "role": "assistant",
-            "content": state.description or "No description available"
-        }],
-        sources=state.sources
-    )   
+ 
 
 def create_image_classification_graph():
     workflow = StateGraph(ImageClassificationState)
@@ -126,7 +113,6 @@ def create_image_classification_graph():
     workflow.add_node("initialize", lambda state: ImageClassificationState(**state.model_dump()))
     workflow.add_node("load_image", load_image)
     workflow.add_node("describe_image", describe_image)
-    workflow.add_node("format_output", format_output)
     
     # Define the edges between nodes
     workflow.add_edge(START, "initialize")
