@@ -81,7 +81,7 @@ def call_model(state: State):
         else:
             multimodal_content.append({
                 "type": "text", 
-                "text": "Please describe this image:"
+                "text": "Please describe this image and be as specific as possible. If the image contained people find out if they resemble any well-known figure in our history:"
             })
             
         # Add image
