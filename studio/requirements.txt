@@ -1,5 +1,6 @@
 grandalf
 gradio
+imgur-python
 langgraph
 langgraph-prebuilt
 langgraph-sdk
@@ -14,6 +15,10 @@ langchain-openai
 nest_asyncio
 notebook
 python-multipart
+pyngrok
+flask
+google-search-results
+serpapi
 scrapegraph-py
 sentence-transformers
 tavily-python

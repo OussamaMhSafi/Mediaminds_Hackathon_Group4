@@ -6,3 +6,4 @@ ENV/
 env.bak/
 venv.bak/
 lg-env/
+.langgraph_api/
