@@ -1,4 +1,3 @@
-chromadb
 grandalf
 gradio
 langgraph
@@ -9,12 +8,13 @@ langsmith
 langchain
 langchain-community
 langchain-core
+langchain_google_community
 langchain-ollama
 langchain-openai
 nest_asyncio
 notebook
 python-multipart
-pyppeteer==1.0.0
+scrapegraph-py
 sentence-transformers
 tavily-python
 wikipedia
