@@ -8,7 +8,8 @@ import base64
 from io import BytesIO
 from PIL import Image
 import re
-
+import requests
+from serpapi import GoogleSearch
 from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -21,7 +22,6 @@ from langchain_core.messages import HumanMessage, AIMessage
 
 # Import search tools
 from langchain_community.tools import TavilySearchResults
-from langchain_google_community import GoogleSearchAPIWrapper
 
 from langgraph.graph import START, END, StateGraph
 from langgraph.prebuilt import ToolNode
@@ -35,7 +35,7 @@ class Decision(BaseModel):
 
 # Define the state which will be passed around
 class ImageClassificationState(TypedDict):
-    image: str
+    image: str  # Now expects a URL to the image
     image_data: Dict[str, Any]
     description: str
     web_scrape_results: Optional[Dict[str, Any]]
@@ -43,25 +43,68 @@ class ImageClassificationState(TypedDict):
     classification: Literal["Real", "Fake"]
     sources: Annotated[List[str], operator.add]
     decision: Optional[Dict[str, Any]]
+    similar_images_count: int  # Number of visually similar images
+    visual_match_urls: Annotated[List[str], operator.add]  # Top 5 visual matches' URLs
+    visual_match_contents: Annotated[List[str], operator.add]  # Top 5 visual matches' website contents
 
 def load_image(state):
     
+    # old image import using local image file
+    """
     image = Image.open(state["image"])	
     buffered = BytesIO()
     image.save(buffered, format=image.format or "JPEG")
     img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
+    """
+
+    image_url = state["image"]
+    
+    try:
+        # Download image from URL with proper headers
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(image_url, headers=headers, timeout=10)
+        response.raise_for_status()
         
-    image_data={
-            "success": True,
-            "image_data": img_str,
-            "width": image.width,
-            "height": image.height,
-            "format": image.format
+        # Verify content type is an image
+        content_type = response.headers.get('content-type', '')
+        if not content_type.startswith('image/'):
+            raise ValueError(f"URL does not point to an image. Content-Type: {content_type}")
+        
+        # Convert to Image
+        image = Image.open(BytesIO(response.content))
+        
+        # Convert to base64
+        buffered = BytesIO()
+        image.save(buffered, format=image.format or "JPEG")
+        img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        
+        return {
+            "image_data": {
+                "success": True,
+                "image_data": img_str,
+                "width": image.width,
+                "height": image.height,
+                "format": image.format,
+                "url": image_url
+            }
         }
     
-    return {"image_data": image_data}
-        
-
+    except Exception as e:
+        print(f"Error loading image from URL: {str(e)}")  # Add debugging
+        # Return error state that won't break the pipeline
+        return {
+            "image_data": {
+                "success": False,
+                "error": str(e),
+                "image_data": "",  # Empty string instead of None
+                "width": 0,
+                "height": 0,
+                "format": None,
+                "url": image_url
+            }
+        }
 
 def describe_image(state):
     
@@ -160,6 +203,60 @@ def webscrape_content(state):
         }
     }
 
+def reverse_image_search(state):
+    """
+    Perform reverse image search using SerpAPI's Google Lens feature.
+    Uses the image URL directly from the state.
+    """
+    # Get the image URL directly from state
+    image_url = state["image"]
+    
+    try:
+        # Perform reverse image search using SerpAPI directly with the provided URL
+        params = {
+            "engine": "google_lens",
+            "url": image_url,
+            "api_key": "c8c0a3f93eb0b6660ec0a33251fd4b61ecf4c6eec271c877997813fbca69a231"
+        }
+        
+        search = GoogleSearch(params)
+        results = search.get_dict()
+        
+        visual_matches = results["visual_matches"]
+        similar_images_count = len(visual_matches)
+        
+        # Get top 5 visual match URLs
+        top_matches = visual_matches[:5] if similar_images_count >= 5 else visual_matches
+        visual_match_urls = [match.get("link", "") for match in top_matches]
+        
+        # Get content from the top visual match URLs
+        visual_match_contents = []
+        for url in visual_match_urls:
+            if url:
+                try:
+                    loader = WebBaseLoader(url)
+                    documents = loader.load()
+                    content = "\n\n".join([doc.page_content for doc in documents])
+                    visual_match_contents.append(f"Source ({url}):\n{content[:5000]}...")  # Limit content size
+                except Exception as e:
+                    visual_match_contents.append(f"Source ({url}):\nFailed to load content: {str(e)}")
+            else:
+                visual_match_contents.append("No valid URL")
+        
+        return {
+            "similar_images_count": similar_images_count,
+            "visual_match_urls": visual_match_urls,
+            "visual_match_contents": visual_match_contents
+        }
+    
+    except Exception as e:
+        # Return empty results with error information if the search fails
+        return {
+            "similar_images_count": 0,
+            "visual_match_urls": [],
+            "visual_match_contents": [f"Error performing reverse image search: {str(e)}"]
+        }
+
 def classify_image(state):
     result_dict = {}
     
@@ -172,6 +269,19 @@ def classify_image(state):
     if state.get("web_scrape_results") and state["web_scrape_results"].get("contents"):
         web_content_text = "\n\n".join(state["web_scrape_results"]["contents"])
     
+    # Add reverse image search results
+    reverse_image_info = f"""
+    REVERSE IMAGE SEARCH RESULTS:
+    
+    Number of visually similar images found: {state.get('similar_images_count', 0)}
+    
+    Visual match URLs:
+    {', '.join(state.get('visual_match_urls', []))}
+    
+    Visual match contents:
+    {', '.join(state.get('visual_match_contents', []))}
+    """
+    
     prompt = f"""You are an image verification specialist. Determine if this image represents a real event or fake news.
 
         IMAGE DESCRIPTION:
@@ -182,6 +292,8 @@ def classify_image(state):
         
         WEB CONTENT:
         {web_content_text}
+        
+        {reverse_image_info}
 
         Analyze if the sources confirm or refute the authenticity of what's described in the image.
         Consider:
@@ -189,6 +301,10 @@ def classify_image(state):
         - Consistency between image description and information from reliable sources
         - Evidence of manipulation or misrepresentation
         - Presence in fact-checking websites
+        
+        IMPORTANT INDICATORS OF FAKE NEWS:
+        - If there are fewer than 6 visually similar images in the reverse image search results, this is a very high indicator that the image might represent fake news
+        - If the contents from the top 5 visual matches don't contain content similar to the image description, this is also likely to indicate fake news
 
         Based only on this information, provide your verdict in this exact format:
         CLASSIFICATION: [REAL or FAKE]
@@ -223,7 +339,7 @@ def classify_image(state):
         classification=classification,
         confidence=confidence,
         explanation=explanation,
-        sources=state["sources"]
+        sources=state["sources"] + state.get("visual_match_urls", [])  # Include both sets of sources
     )
 
     result_dict["decision"] = decision.model_dump()
@@ -240,15 +356,22 @@ def create_image_classification_graph():
     workflow.add_node("describe_image", describe_image)
     workflow.add_node("optimize_search_query", optimize_search_query)
     workflow.add_node("webscrape_content", webscrape_content)
+    workflow.add_node("reverse_image_search", reverse_image_search)
     workflow.add_node("classify_image", classify_image)
     
-    # Define the edges between nodes (sequential flow)
+    # Define the edges
     workflow.add_edge(START, "initialize")
     workflow.add_edge("initialize", "load_image")
     workflow.add_edge("load_image", "describe_image")
+    
+    # Branch 1: Web scraping path
     workflow.add_edge("describe_image", "optimize_search_query")
     workflow.add_edge("optimize_search_query", "webscrape_content")
-    workflow.add_edge("webscrape_content", "classify_image")
+    
+    # Branch 2: Reverse image search path (directly from describe_image to reverse_image_search)
+    workflow.add_edge("describe_image", "reverse_image_search")
+    workflow.add_edge(["webscrape_content", "reverse_image_search"], "classify_image")
+    
     workflow.add_edge("classify_image", END)
     
     # Compile the graph
