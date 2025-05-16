@@ -27,5 +27,5 @@ pip install -r requirements.txt
 4. Within the `Studio` directory, run:
 
 ```
-langgrapg dev
+langgraph dev
 ```
