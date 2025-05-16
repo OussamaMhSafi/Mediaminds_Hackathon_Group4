@@ -18,6 +18,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 # Import Ollama integration
 from langchain_ollama import OllamaLLM
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage
 
 # Import search tools
@@ -105,41 +106,46 @@ def load_image(state):
                 "url": image_url
             }
         }
-
 def describe_image(state):
-    
-    # Initialize Ollama with llava model
-    llm = OllamaLLM(model="llava")
+    # Use an OpenAI model that supports vision
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
     
     # Get the base64 image from state
     image_base64 = state["image_data"]["image_data"]
     
-    # Create prompt template for image description
-    template = """You are an AI assistant that provides detailed descriptions of images.
-    Focus on key elements that can be verified:
-    - People or notable figures in the image and their names
-    - Location and setting
-    - Any visible text or signs
-    - Events or activities depicted
-    - Distinctive objects or landmarks
-    - Approximate time period or date indicators
+    # Create messages with the image directly for OpenAI
+    messages = [
+        SystemMessage(content="You are an AI assistant that provides detailed descriptions of images."),
+        HumanMessage(content=[
+            {
+                "type": "text",
+                "text": """Focus on key elements that can be verified:
+                - People or notable figures in the image and their names
+                - Location and setting
+                - Any visible text or signs
+                - Events or activities depicted
+                - Distinctive objects or landmarks
+                - Approximate time period or date indicators
+                
+                Please provide a detailed factual description of this image:"""
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{image_base64}"
+                }
+            }
+        ])
+    ]
     
-    Please provide a detailed factual description of this image:"""
+    # Invoke the model directly with the messages
+    response = llm.invoke(messages)
     
-    prompt = ChatPromptTemplate.from_template(template)
-    
-    # Bind the image to the LLM
-    llm_with_image = llm.bind(images=[image_base64])
-    
-    # Create the chain
-    chain = prompt | llm_with_image
-    description = chain.invoke({})
-    
-    return {"description": description}
-
+    return {"description": response.content}
 def optimize_search_query(state):
     
-    llm = OllamaLLM(model="llama3")
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    # llm = OllamaLLM(model="llama3")
     
     prompt = f"""Given this image description, create a concise search query that will be used to verify if the image represents a real event.
     The query should focus on the most distinctive and verifiable elements, include names, locations, or dates if present, and be under 10 words.
@@ -150,7 +156,8 @@ def optimize_search_query(state):
     
     SEARCH QUERY:"""
     
-    search_query = llm.invoke(prompt).strip()
+    response = llm.invoke(prompt)
+    search_query = response.content.strip()
     
     # Clean up the query (remove any additional text the model might add)
     if len(search_query.split()) > 30:
@@ -260,7 +267,8 @@ def reverse_image_search(state):
 def classify_image(state):
     result_dict = {}
     
-    llm = OllamaLLM(model="llama3")
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    # llm = OllamaLLM(model="llama3")
     
     sources_text = "\n".join([f"- {source}" for source in state["sources"]])
     
@@ -312,26 +320,27 @@ def classify_image(state):
         EXPLANATION: [Your detailed explanation with references to specific sources]"""
 
     analysis = llm.invoke(prompt)
+    analysis_text = analysis.content
     
     # Parse the analysis to extract classification, confidence, and explanation
     classification = "UNKNOWN"
     confidence = 0
-    explanation = analysis
+    explanation = analysis_text
     
     # Extract classification
-    classification_match = re.search(r'CLASSIFICATION:\s*(REAL|FAKE)', analysis, re.IGNORECASE)
+    classification_match = re.search(r'CLASSIFICATION:\s*(REAL|FAKE)', analysis_text, re.IGNORECASE)
     if classification_match:
         classification = classification_match.group(1).upper()
     
     # Extract confidence
-    confidence_match = re.search(r'CONFIDENCE:\s*(\d+)', analysis)
+    confidence_match = re.search(r'CONFIDENCE:\s*(\d+)', analysis_text)
     if confidence_match:
         confidence = int(confidence_match.group(1))
         # Ensure confidence is within valid range
         confidence = max(0, min(100, confidence))
     
     # Extract explanation
-    explanation_match = re.search(r'EXPLANATION:(.*)', analysis, re.DOTALL)
+    explanation_match = re.search(r'EXPLANATION:(.*)', analysis_text, re.DOTALL)
     if explanation_match:
         explanation = explanation_match.group(1).strip()
     
