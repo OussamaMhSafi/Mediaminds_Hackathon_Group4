@@ -7,8 +7,8 @@ import operator
 import base64
 from io import BytesIO
 from PIL import Image
-from collections import Counter
 import re
+from collections import Counter
 import requests
 from serpapi import GoogleSearch
 from langchain_core.tools import tool
@@ -116,23 +116,19 @@ def describe_image(state):
     
     # Create messages with the image directly for OpenAI
     messages = [
-        SystemMessage(content="You are a skilled fact-checking journalist who provides accurate, detailed, and verifiable descriptions of images to support fact-check investigations."),
+        SystemMessage(content="You are an AI assistant that provides detailed descriptions of images."),
         HumanMessage(content=[
             {
                 "type": "text",
-                "text": """Your task is to describe the image as if you're verifying its authenticity for a fact-checking report. Focus only on observable and identifiable facts.
-
-Describe the following clearly:
-1. People: Recognizable individuals (name them if possible)
-2. Location: Specific setting, landmarks, scenery
-3. Visible text: On signs, banners, documents
-4. Activities: What’s happening and how people are interacting
-5. Objects: Unusual or identifiable objects (e.g., weapons, flags, vehicles)
-6. Time indicators: Clothing, technology, daylight, weather, etc.
-
-Avoid assumptions. Write 4–6 factual sentences.
-
-End your description with: '[End of description]'"""
+                "text": """Focus on key elements that can be verified:
+                - People or notable figures in the image and their names
+                - Location and setting
+                - Any visible text or signs
+                - Events or activities depicted
+                - Distinctive objects or landmarks
+                - Approximate time period or date indicators
+                
+                Please provide a detailed factual description of this image:"""
             },
             {
                 "type": "image_url",
@@ -162,32 +158,27 @@ def extract_keywords(text: str, max_keywords: int = 10):
     return [word for word, _ in freq.most_common(max_keywords)]
 
 
-def optimize_search_query(state):
+def optimize_search_query(state):  
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-
-    description = state["description"]
-    keywords = extract_keywords(description, max_keywords=10)
-    keywords_preview = ", ".join(keywords)
-
-    prompt = f"""You are an expert in crafting short search queries for image verification.
-
-Extracted keywords from the description: {keywords_preview}
-
-Using the most verifiable and relevant of these keywords, craft a search query under 10 words.
-
-IMAGE DESCRIPTION:
-{description}
-
-Search query:"""
-
+    # llm = OllamaLLM(model="llama3")
+    
+    prompt = f"""Given this image description, create a concise search query that will be used to verify if the image represents a real event.
+    The query should focus on the most distinctive and verifiable elements, include names, locations, or dates if present, and be under 10 words.
+    Return only the search query.
+    
+    IMAGE DESCRIPTION:
+    {state["description"]}
+    
+    SEARCH QUERY:"""
+    
     response = llm.invoke(prompt)
     search_query = response.content.strip()
-
+    
+    # Clean up the query (remove any additional text the model might add)
     if len(search_query.split()) > 30:
         search_query = " ".join(search_query.split()[:30])
-
+    
     return {"search_query": search_query}
-
         
 # Function to perform web scraping using Tavily
 def load_webpage_content(url: str) -> str:
