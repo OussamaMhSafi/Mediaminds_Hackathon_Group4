@@ -13,6 +13,7 @@ langchain-ollama
 langchain-openai
 nest_asyncio
 notebook
+huawei-obs
 python-multipart
 pyppeteer==1.0.0
 sentence-transformers
