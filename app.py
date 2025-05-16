@@ -1,24 +1,36 @@
-import streamlit as st
-import requests
-from PIL import Image
-from io import BytesIO
+# app.py
+import sys
+import os
 
-# Do not initialize the graph at the module level
-# Instead, create a function to initialize the graph when needed
+# Only import streamlit-related components inside functions
+# to avoid module-level Streamlit calls
 
-def main():
+def create_app():
+    import streamlit as st
+    import requests
+    from PIL import Image
+    from io import BytesIO
+    
+    # Import the graph creation function when needed
+    def load_graph():
+        # Add the parent directory to sys.path if needed
+        # This helps with importing the studio module
+        parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if parent_dir not in sys.path:
+            sys.path.append(parent_dir)
+            
+        from studio.image_classification import create_image_classification_graph
+        return create_image_classification_graph()
+    
+    # Configure the page
     st.set_page_config(page_title="Deepfake Image Verifier", layout="centered")
     st.title("🧠 Deepfake Image Verifier")
     st.markdown("Paste an image URL to verify if it's real or fake using AI.")
     
-    # Initialize the graph inside the function (within Streamlit context)
-    @st.cache_resource  # This will cache the graph to avoid reinitialization
-    def get_graph():
-        from studio.image_classification import create_image_classification_graph
-        return create_image_classification_graph()
-    
-    # Get the graph only when needed
-    graph = get_graph()
+    # Initialize graph with memoization (only when needed)
+    @st.cache_resource
+    def get_cached_graph():
+        return load_graph()
     
     image_url = st.text_input("Enter image URL:", placeholder="https://example.com/image.jpg")
 
@@ -35,6 +47,9 @@ def main():
                 st.image(img, caption="Analyzed Image", use_column_width=True)
 
                 if st.button("Analyze Image"):
+                    # Now get the graph (only when needed)
+                    graph = get_cached_graph()
+                    
                     with st.spinner("Analyzing... This may take a few moments"):
                         # Initialize the state correctly according to ImageClassificationState
                         initial_state = {
@@ -124,6 +139,13 @@ def main():
     st.markdown("---")
     st.markdown("Powered by LangChain and Streamlit")
 
-# Use this pattern to ensure code only runs in the Streamlit context
+# This ensures no Streamlit functions are called at module level
 if __name__ == "__main__":
-    main()
+    # Check if being run via streamlit
+    if not 'streamlit' in sys.modules:
+        print("WARNING: This script should be run using 'streamlit run app.py'")
+        print("Running directly with Python will cause errors.")
+        # We could exit here, but let's allow it to continue with a warning
+    
+    # Call the function containing all Streamlit code
+    create_app()
