@@ -3,7 +3,16 @@
   "graphs": {
     "deepfake": {
       "path": "./deepfake_detector.py:graph",
-      "default_input": {}
+      "default_input": {
+        "image_path": "test_image.png" 
+      }
+    },
+    "vlm_describer": {
+      "path": "./vlm_describer_graph.py:vlm_graph",
+      "default_input": {
+        "image_input_path": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/cat-with-glasses.png",
+        "prompt_text": "Describe this image in detail."
+      }
     }
   },
   "env": null,
