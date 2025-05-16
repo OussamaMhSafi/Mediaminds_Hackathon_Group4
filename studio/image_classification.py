@@ -281,95 +281,100 @@ def reverse_image_search(state):
 
 def classify_image(state):
     result_dict = {}
-    
+
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    # llm = OllamaLLM(model="llama3")
-    
+
+    similar_images_count = state.get("similar_images_count", 0)
+    visual_match_contents = "\n".join(state.get("visual_match_contents", []))
     sources_text = "\n".join([f"- {source}" for source in state["sources"]])
-    
-    # Add web content if available
     web_content_text = ""
+
     if state.get("web_scrape_results") and state["web_scrape_results"].get("contents"):
         web_content_text = "\n\n".join(state["web_scrape_results"]["contents"])
-    
-    # Add reverse image search results
+
+    # 🧠 Level 1: Automatic FAKE if visual match count is low AND no content match
+    content_indicates_mismatch = (
+        ("not real" in visual_match_contents.lower() or
+         "photoshop" in visual_match_contents.lower() or
+         "edited" in visual_match_contents.lower() or
+         "hoax" in visual_match_contents.lower() or
+         "fake" in visual_match_contents.lower())
+    )
+
+    if similar_images_count < 10 and content_indicates_mismatch:
+        decision = Decision(
+            classification="FAKE",
+            confidence=98,
+            explanation="Reverse image search returned fewer than 10 results and several results suggest the image is fake or manipulated (keywords like 'fake', 'photoshop', or 'not real' were detected).",
+            sources=state["sources"] + state.get("visual_match_urls", [])
+        )
+        result_dict["decision"] = decision.model_dump()
+        return result_dict
+
+    # 🧠 Level 2: Weighted LLM classification with strong reverse search bias
     reverse_image_info = f"""
-    REVERSE IMAGE SEARCH RESULTS:
-    
-    Number of visually similar images found: {state.get('similar_images_count', 0)}
-    
-    Visual match URLs:
-    {', '.join(state.get('visual_match_urls', []))}
-    
-    Visual match contents:
-    {', '.join(state.get('visual_match_contents', []))}
-    """
-    
-    prompt = f"""You are an image verification specialist. Determine if this image represents a real event or fake news.
+REVERSE IMAGE SEARCH RESULTS:
+- Number of visually similar images found: {similar_images_count}
+- Visual match URLs: {', '.join(state.get('visual_match_urls', []))}
+- Visual match contents:
+{visual_match_contents}
+"""
 
-        IMAGE DESCRIPTION:
-        {state["description"]}
+    prompt = f"""You are an image verification specialist. Your task is to determine whether the provided image is part of a real-world event or a fake/edited scene.
 
-        WEB SOURCES:
-        {sources_text}
-        
-        WEB CONTENT:
-        {web_content_text}
-        
-        {reverse_image_info}
+IMAGE DESCRIPTION:
+{state["description"]}
 
-        Analyze if the sources confirm or refute the authenticity of what's described in the image.
-        Consider:
-        - If credible sources mention the event/scene described
-        - Consistency between image description and information from reliable sources
-        - Evidence of manipulation or misrepresentation
-        - Presence in fact-checking websites
-        
-        IMPORTANT INDICATORS OF FAKE NEWS:
-        - If there are fewer than 6 visually similar images in the reverse image search results, this is a very high indicator that the image might represent fake news
-        - If the contents from the top 5 visual matches don't contain content similar to the image description, this is also likely to indicate fake news
+WEB SOURCES:
+{sources_text}
 
-        Based only on this information, provide your verdict in this exact format:
-        CLASSIFICATION: [REAL or FAKE]
-        CONFIDENCE: [0-100]
-        EXPLANATION: [Your detailed explanation with references to specific sources]"""
+WEB CONTENT:
+{web_content_text}
+
+{reverse_image_info}
+
+CRITICAL RULES:
+- Reverse image search is the MOST IMPORTANT signal.
+- If fewer than 10 similar images are found and they do NOT support the described scene, classify the image as FAKE.
+- If similar images are found and they strongly support the description (same people, event, setting), you may classify as REAL.
+- If contents mention "photoshopped", "not real", or similar phrases, that is strong evidence of fakery.
+
+Format:
+CLASSIFICATION: [REAL or FAKE]
+CONFIDENCE: [0-100]
+EXPLANATION: [Detailed justification with evidence]
+"""
 
     analysis = llm.invoke(prompt)
     analysis_text = analysis.content
-    
-    # Parse the analysis to extract classification, confidence, and explanation
+
+    # Parse results
     classification = "UNKNOWN"
     confidence = 0
     explanation = analysis_text
-    
-    # Extract classification
+
     classification_match = re.search(r'CLASSIFICATION:\s*(REAL|FAKE)', analysis_text, re.IGNORECASE)
     if classification_match:
         classification = classification_match.group(1).upper()
-    
-    # Extract confidence
+
     confidence_match = re.search(r'CONFIDENCE:\s*(\d+)', analysis_text)
     if confidence_match:
         confidence = int(confidence_match.group(1))
-        # Ensure confidence is within valid range
         confidence = max(0, min(100, confidence))
-    
-    # Extract explanation
+
     explanation_match = re.search(r'EXPLANATION:(.*)', analysis_text, re.DOTALL)
     if explanation_match:
         explanation = explanation_match.group(1).strip()
-    
+
     decision = Decision(
         classification=classification,
         confidence=confidence,
         explanation=explanation,
-        sources=state["sources"] + state.get("visual_match_urls", [])  # Include both sets of sources
+        sources=state["sources"] + state.get("visual_match_urls", [])
     )
 
     result_dict["decision"] = decision.model_dump()
-    
     return result_dict
-
 
 def create_image_classification_graph():
     workflow = StateGraph(ImageClassificationState)
