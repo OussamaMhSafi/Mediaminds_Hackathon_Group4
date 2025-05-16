@@ -46,8 +46,8 @@ class ImageClassificationState(TypedDict):
     sources: Annotated[List[str], operator.add]
     decision: Optional[Dict[str, Any]]
     similar_images_count: int  # Number of visually similar images
-    visual_match_urls: Annotated[List[str], operator.add]  # Top 5 visual matches' URLs
-    visual_match_contents: Annotated[List[str], operator.add]  # Top 5 visual matches' website contents
+    visual_match_urls: Annotated[List[str], operator.add]  # Top 10 visual matches' URLs
+    visual_match_contents: Annotated[List[str], operator.add]  # Top 10 visual matches' website contents
 
 def load_image(state):
     
@@ -107,6 +107,7 @@ def load_image(state):
                 "url": image_url
             }
         }
+    
 def describe_image(state):
     # Use an OpenAI model that supports vision
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
@@ -143,46 +144,9 @@ def describe_image(state):
     response = llm.invoke(messages)
     
     return {"description": response.content}
-
-def extract_keywords(text: str, max_keywords: int = 10):
-    # Lowercase and clean punctuation
-    words = re.findall(r'\b[a-zA-Z][a-zA-Z\-]+\b', text.lower())
-    # Remove generic stop words
-    stopwords = set([
-        "the", "and", "or", "a", "of", "in", "on", "with", "to", "for", 
-        "an", "at", "from", "by", "as", "this", "that", "these", "those", "it", "is", "are"
-    ])
-    keywords = [word for word in words if word not in stopwords and len(word) > 2]
-    
-    freq = Counter(keywords)
-    return [word for word, _ in freq.most_common(max_keywords)]
-
-
-def optimize_search_query(state):  
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    # llm = OllamaLLM(model="llama3")
-    
-    prompt = f"""Given this image description, create a concise search query that will be used to verify if the image represents a real event.
-    The query should focus on the most distinctive and verifiable elements, include names, locations, or dates if present, and be under 10 words.
-    Return only the search query.
-    
-    IMAGE DESCRIPTION:
-    {state["description"]}
-    
-    SEARCH QUERY:"""
-    
-    response = llm.invoke(prompt)
-    search_query = response.content.strip()
-    
-    # Clean up the query (remove any additional text the model might add)
-    if len(search_query.split()) > 30:
-        search_query = " ".join(search_query.split()[:30])
-    
-    return {"search_query": search_query}
         
-# Function to perform web scraping using Tavily
 def load_webpage_content(url: str) -> str:
-    """Load and extract content from a webpage URL."""
+
     try:
         loader = WebBaseLoader(url)
         documents = loader.load()
@@ -191,46 +155,8 @@ def load_webpage_content(url: str) -> str:
     except Exception as e:
         return f"Error loading webpage: {e}"
 
-# Function to perform web scraping using Tavily
-def webscrape_content(state):
-    query = state['search_query']
-    tavily_search = TavilySearchResults(max_results=5, include_raw_content=True)
-    tavily_results = tavily_search.invoke({"query": query})
-    
-    sources = []
-    web_contents = []
-    
-    for result in tavily_results:
-        url = result.get("url")
-        if url:
-            sources.append(url)
-            
-            # Get content directly from Tavily result if available
-            if result.get("content"):
-                content = f"Source ({url}):\n{result.get('content')[:5000]}..."
-                web_contents.append(content)
-
-            else:
-                try:
-                    page_content = load_webpage_content(url)
-                    content = f"Source ({url}):\n{page_content[:5000]}..."
-                    web_contents.append(content)
-                except Exception as e:
-                    web_contents.append(f"Source ({url}):\nFailed to load content: {str(e)}")
-    
-    return {
-        "sources": sources,
-        "web_scrape_results": {
-            "contents": web_contents
-        }
-    }
-
 def reverse_image_search(state):
-    """
-    Perform reverse image search using SerpAPI's Google Lens feature.
-    Uses the image URL directly from the state.
-    """
-    # Get the image URL directly from state
+
     image_url = state["image"]
     
     try:
@@ -247,8 +173,8 @@ def reverse_image_search(state):
         visual_matches = results["visual_matches"]
         similar_images_count = len(visual_matches)
         
-        # Get top 5 visual match URLs
-        top_matches = visual_matches[:5] if similar_images_count >= 5 else visual_matches
+        # Get top 10 visual match URLs
+        top_matches = visual_matches[:10] if similar_images_count >= 10 else visual_matches
         visual_match_urls = [match.get("link", "") for match in top_matches]
         
         # Get content from the top visual match URLs
@@ -259,7 +185,7 @@ def reverse_image_search(state):
                     loader = WebBaseLoader(url)
                     documents = loader.load()
                     content = "\n\n".join([doc.page_content for doc in documents])
-                    visual_match_contents.append(f"Source ({url}):\n{content[:5000]}...")  # Limit content size
+                    visual_match_contents.append(f"Source ({url}):\n{content[:5000]}...") 
                 except Exception as e:
                     visual_match_contents.append(f"Source ({url}):\nFailed to load content: {str(e)}")
             else:
@@ -286,64 +212,30 @@ def classify_image(state):
 
     similar_images_count = state.get("similar_images_count", 0)
     visual_match_contents = "\n".join(state.get("visual_match_contents", []))
-    sources_text = "\n".join([f"- {source}" for source in state["sources"]])
-    web_content_text = ""
 
-    if state.get("web_scrape_results") and state["web_scrape_results"].get("contents"):
-        web_content_text = "\n\n".join(state["web_scrape_results"]["contents"])
+    prompt = f"""
+    You are an image verification specialist. Your task is to determine whether the provided image is part of a real-world event or a fake/edited scene.
 
-    # 🧠 Level 1: Automatic FAKE if visual match count is low AND no content match
-    content_indicates_mismatch = (
-        ("not real" in visual_match_contents.lower() or
-         "photoshop" in visual_match_contents.lower() or
-         "edited" in visual_match_contents.lower() or
-         "hoax" in visual_match_contents.lower() or
-         "fake" in visual_match_contents.lower())
-    )
+    IMAGE DESCRIPTION:
+    {state["description"]}
+    
+    REVERSE IMAGE SEARCH RESULTS:
+    - Number of visually similar images found: {similar_images_count}
+    - Visual match URLs: {', '.join(state.get('visual_match_urls', []))}
+    - Visual match contents:
+    {visual_match_contents}
 
-    if similar_images_count < 10 and content_indicates_mismatch:
-        decision = Decision(
-            classification="FAKE",
-            confidence=98,
-            explanation="Reverse image search returned fewer than 10 results and several results suggest the image is fake or manipulated (keywords like 'fake', 'photoshop', or 'not real' were detected).",
-            sources=state["sources"] + state.get("visual_match_urls", [])
-        )
-        result_dict["decision"] = decision.model_dump()
-        return result_dict
+    CRITICAL RULES:
+    - Reverse image search is the MOST IMPORTANT signal.
+    - If the number of visually similar images is less than 10 always classify as FAKE.
+    - If the contents from the visual matches don't contain content similar to the image description, this is also likely to indicate fake news
+    - If contents mention "photoshopped", "not real", or similar phrases, that is strong evidence of fakery.
 
-    # 🧠 Level 2: Weighted LLM classification with strong reverse search bias
-    reverse_image_info = f"""
-REVERSE IMAGE SEARCH RESULTS:
-- Number of visually similar images found: {similar_images_count}
-- Visual match URLs: {', '.join(state.get('visual_match_urls', []))}
-- Visual match contents:
-{visual_match_contents}
-"""
-
-    prompt = f"""You are an image verification specialist. Your task is to determine whether the provided image is part of a real-world event or a fake/edited scene.
-
-IMAGE DESCRIPTION:
-{state["description"]}
-
-WEB SOURCES:
-{sources_text}
-
-WEB CONTENT:
-{web_content_text}
-
-{reverse_image_info}
-
-CRITICAL RULES:
-- Reverse image search is the MOST IMPORTANT signal.
-- If fewer than 10 similar images are found and they do NOT support the described scene, classify the image as FAKE.
-- If similar images are found and they strongly support the description (same people, event, setting), you may classify as REAL.
-- If contents mention "photoshopped", "not real", or similar phrases, that is strong evidence of fakery.
-
-Format:
-CLASSIFICATION: [REAL or FAKE]
-CONFIDENCE: [0-100]
-EXPLANATION: [Detailed justification with evidence]
-"""
+    Format:
+    CLASSIFICATION: [REAL or FAKE]
+    CONFIDENCE: [0-100]
+    EXPLANATION: [Detailed justification with evidence]
+    """
 
     analysis = llm.invoke(prompt)
     analysis_text = analysis.content
@@ -383,28 +275,19 @@ def create_image_classification_graph():
     workflow.add_node("initialize", lambda state: state)
     workflow.add_node("load_image", load_image)
     workflow.add_node("describe_image", describe_image)
-    workflow.add_node("optimize_search_query", optimize_search_query)
-    workflow.add_node("webscrape_content", webscrape_content)
     workflow.add_node("reverse_image_search", reverse_image_search)
     workflow.add_node("classify_image", classify_image)
     
     # Define the edges
     workflow.add_edge(START, "initialize")
-    workflow.add_edge("initialize", "load_image")
+    workflow.add_edge("initialize", "load_image")    
     workflow.add_edge("load_image", "describe_image")
-    
-    # Branch 1: Web scraping path
-    workflow.add_edge("describe_image", "optimize_search_query")
-    workflow.add_edge("optimize_search_query", "webscrape_content")
-    
-    # Branch 2: Reverse image search path (directly from describe_image to reverse_image_search)
     workflow.add_edge("describe_image", "reverse_image_search")
-    workflow.add_edge(["webscrape_content", "reverse_image_search"], "classify_image")
+    workflow.add_edge("reverse_image_search", "classify_image")
     
     workflow.add_edge("classify_image", END)
     
     # Compile the graph
     return workflow.compile()
 
-# Create the graph, to launch using 'langgraph dev'
 graph = create_image_classification_graph()
