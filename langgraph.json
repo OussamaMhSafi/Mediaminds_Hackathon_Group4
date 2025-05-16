@@ -1,8 +1,10 @@
 {
   "dockerfile_lines": [],
   "graphs": {
-    
-    "deepfake": "./deepfake_detector.py:graph"
+    "deepfake": {
+      "path": "./deepfake_detector.py:graph",
+      "default_input": {}
+    }
   },
   "env": null,
   "python_version": "3.11",
