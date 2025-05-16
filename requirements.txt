@@ -1,0 +1,8 @@
+langchain_core==0.3.60
+langgraph==0.4.5
+numpy==2.2.5
+Pillow==11.2.1
+pydantic==2.11.4
+torch==2.7.0
+transformers==4.51.3
+typing_extensions==4.13.2

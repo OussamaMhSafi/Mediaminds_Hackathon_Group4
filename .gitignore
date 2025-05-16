@@ -1,0 +1,12 @@
+# Ignore all .pkl files
+*.pkl
+
+# Ignore temporary Python files
+*.pyc
+*.pyo
+__pycache__/
+
+#
+hackathon1/
+
+*.pckl
