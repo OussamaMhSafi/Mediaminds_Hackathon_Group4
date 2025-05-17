@@ -3,78 +3,270 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Classification Result (Modular)</title>
-     <style>
-        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
-        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 800px; margin: auto; }
-        h1, h2 { color: #333; border-bottom: 1px solid #eee; padding-bottom: 10px;}
-        .result-section { margin-bottom: 25px; padding: 15px; background-color: #f9f9f9; border-radius: 4px; }
-        .result-label { font-weight: bold; color: #555; }
-        .classification-REAL { color: green; font-weight: bold; font-size: 1.3em; }
-        .classification-FAKE { color: red; font-weight: bold; font-size: 1.3em; }
-        .classification-UNKNOWN { color: orange; font-weight: bold; font-size: 1.3em; }
-        pre { background-color: #eee; padding: 15px; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; font-size: 0.95em; line-height: 1.6; }
-        img.uploaded-image { max-width: 100%; height: auto; border: 1px solid #ddd; margin-top: 10px; border-radius: 4px; display: block; margin-left: auto; margin-right: auto; max-height: 400px;}
-        .error-message { color: #D8000C; background-color: #FFD2D2; padding:10px; border-radius:4px; font-weight: bold;}
-        .traceback { font-size: 0.8em; color: #555; white-space: pre-wrap; max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 5px;}
-        ul { list-style-type: disc; padding-left: 20px; }
-        li { margin-bottom: 5px; }
-        a { color: #007bff; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        .details-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
-        .detail-item p { margin: 5px 0; }
+    <title>Deepfake Image Detection - Result</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 30px;
+            background-color: #ffffff;
+            border-bottom: 1px solid #e0e0e0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        header .logo {
+            height: 35px;
+            width: auto;
+        }
+
+        header h1.site-title {
+            font-size: 1.6em;
+            font-weight: 600;
+            color: #2c3e50;
+            margin: 0 15px;
+            text-align: center;
+            flex-grow: 1;
+        }
+        
+        .content-container {
+            max-width: 850px;
+            margin: 25px auto;
+            padding: 25px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+
+        .page-title {
+            font-size: 1.8em;
+            color: #343a40;
+            margin-bottom: 25px;
+            text-align: center;
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 15px;
+        }
+        
+        .result-section {
+            margin-bottom: 25px;
+            padding: 18px;
+            background-color: #f9f9f9;
+            border-radius: 6px;
+            border: 1px solid #efefef;
+        }
+
+        .result-section h2.section-title {
+            font-size: 1.35em;
+            color: #0069d9;
+            margin-top: 0;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 8px;
+        }
+
+        .result-label {
+            font-weight: 600;
+            color: #4a5568;
+        }
+        
+        .result-item p { /* For consistent spacing in result items */
+             margin: 8px 0;
+        }
+
+        .classification-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            font-size: 1.1em;
+            font-weight: bold;
+            border-radius: 16px;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-left: 8px;
+        }
+        .classification-REAL { background-color: #28a745; }
+        .classification-FAKE { background-color: #dc3545; }
+        .classification-UNKNOWN { background-color: #ffc107; color: #333; }
+
+        pre.explanation-text, pre.ai-description {
+            background-color: #eef2f7;
+            padding: 12px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 0.95em;
+            line-height: 1.5;
+            border: 1px solid #d6dde5;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        img.uploaded-image {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ccc;
+            margin-top: 10px;
+            border-radius: 6px;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+            max-height: 400px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+        }
+
+        .results-error-box {
+            color: #D8000C;
+            background-color: #FFD2D2;
+            padding: 15px; /* Increased padding */
+            border-radius: 6px; /* Consistent radius */
+            font-weight: 500; /* Adjusted weight */
+            border: 1px solid #D8000C;
+        }
+        .results-error-box h2.error-title {
+            color: #D8000C;
+            border-bottom: 1px solid #fab3b3;
+            font-size: 1.3em; /* Consistent title size */
+            margin-top:0;
+            padding-bottom: 8px;
+        }
+         .results-error-box p {
+            margin: 10px 0;
+        }
+        pre.traceback-text {
+            font-size: 0.85em;
+            color: #444;
+            background-color: #fceded;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 4px;
+            max-height: 150px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        ul.sources-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        ul.sources-list li {
+            background-color: #fff;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            border-radius: 4px;
+            border: 1px solid #e0e0e0;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        }
+        ul.sources-list li a {
+            color: #007bff;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        ul.sources-list li a:hover {
+            text-decoration: underline;
+            color: #0056b3;
+        }
+
+        .details-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 18px;
+        }
+        .detail-item p { margin: 8px 0; } /* Consistent spacing */
+        .detail-item .result-label { display: block; margin-bottom: 4px;} /* Make label block for clarity */
+
+
+        .button-style {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.2s ease;
+        }
+        .button-style:hover {
+            background-color: #0056b3;
+        }
+        .text-center { text-align: center; }
+        .mt-20 { margin-top: 20px; }
+        .mt-30 { margin-top: 30px; } /* Added for more spacing */
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Classification Result</h1>
+    <header>
+        <img src="logo.png" alt="Logo Left" class="logo" /> <!-- Assuming logo.png -->
+        <h1 class="site-title">Deepfake Image Detection</h1>
+        <img src="logo2.png" alt="Logo Right" class="logo" /> <!-- Assuming logo2.png -->
+    </header>
+
+    <div class="content-container">
+        <h1 class="page-title">Classification Result</h1>
 
         {% if error %}
-            <div class="result-section">
-                <h2 class="error-message">An Error Occurred</h2>
+            <div class="results-error-box">
+                <h2 class="error-title">An Error Occurred</h2>
                 <p>{{ error }}</p>
                 {% if full_trace %}
-                    <h3>Traceback (for debugging):</h3>
-                    <pre class="traceback">{{ full_trace }}</pre>
+                    <h3 style="font-size:1em; margin-top:15px; margin-bottom:5px;">Traceback (for debugging):</h3>
+                    <pre class="traceback-text">{{ full_trace }}</pre>
                 {% endif %}
             </div>
         {% elif result and result.classification %}
             <div class="result-section">
-                <h2>Overall Decision</h2>
-                <p><span class="result-label">Classification:</span> <span class="classification-{{ result.classification }}">{{ result.classification }}</span></p>
-                <p><span class="result-label">Confidence:</span> {{ result.confidence }}%</p>
-                <p><span class="result-label">Explanation:</span></p>
-                <pre>{{ result.explanation }}</pre>
+                <h2 class="section-title">Overall Decision</h2>
+                <div class="result-item">
+                    <p><span class="result-label">Classification:</span> <span class="classification-badge classification-{{ result.classification }}">{{ result.classification }}</span></p>
+                    <p><span class="result-label">Confidence:</span> {{ result.confidence }}%</p>
+                    <p><span class="result-label">Explanation:</span></p>
+                    <pre class="explanation-text">{{ result.explanation }}</pre>
+                </div>
                 {% if result.sources and result.sources|length > 0 %}
-                    <p><span class="result-label">Evidence Sources:</span></p>
-                    <ul>
-                        {% for source_url_item in result.sources %}
-                            <li><a href="{{ source_url_item }}" target="_blank" rel="noopener noreferrer">{{ source_url_item }}</a></li>
-                        {% endfor %}
-                    </ul>
+                    <div class="result-item" style="margin-top:15px;">
+                        <p><span class="result-label">Evidence Sources:</span></p>
+                        <ul class="sources-list">
+                            {% for source_url_item in result.sources %}
+                                <li><a href="{{ source_url_item }}" target="_blank" rel="noopener noreferrer">{{ source_url_item }}</a></li>
+                            {% endfor %}
+                        </ul>
+                    </div>
                 {% endif %}
             </div>
 
             {% if obs_url %}
             <div class="result-section">
-                <h2>Uploaded Image</h2>
+                <h2 class="section-title">Uploaded Image</h2>
                 <img src="{{ obs_url }}" alt="Uploaded Image" class="uploaded-image">
             </div>
             {% endif %}
 
             <div class="result-section">
-                <h2>Analysis Breakdown</h2>
+                <h2 class="section-title">Analysis Breakdown</h2>
                 <div class="details-grid">
                     <div class="detail-item">
                         <p><span class="result-label">Image Description (AI):</span></p>
-                        <pre>{{ image_description | default('N/A') }}</pre>
+                        <pre class="ai-description">{{ image_description | default('N/A') }}</pre>
                     </div>
                     <div class="detail-item">
                          <p><span class="result-label">AI Generated Likelihood:</span> {{ "%.2f"|format(ai_likelihood * 100 if ai_likelihood is not none else 0) }}%</p>
                         {% if is_portrait %}
                              <p><span class="result-label">Deepfake Likelihood (Portrait):</span> {{ "%.2f"|format(deepfake_likelihood * 100 if deepfake_likelihood is not none else 0) }}%</p>
                         {% else %}
-                             <p><span class="result-label">Deepfake Detection:</span> Not a portrait / check not performed / or error.</p>
+                             <p><span class="result-label">Deepfake Detection (Portrait):</span> Not a portrait / check not performed / or error.</p>
                         {% endif %}
                         <p><span class="result-label">Similar Images Found (Reverse Search):</span> {{ similar_images_count if similar_images_count is not none else 'N/A' }}</p>
                     </div>
@@ -82,19 +274,21 @@
             </div>
 
         {% else %}
-             <div class="result-section">
-                <h2 class="error-message">Classification Result Not Available</h2>
+             <div class="result-section results-error-box"> <!-- Using error box style for consistency -->
+                <h2 class="section-title error-title">Classification Result Not Available</h2>
                 <p>The classification process did not produce a valid decision. Please check server logs for details.</p>
                 {% if result and result.error %}
-                    <p>Details: {{ result.error }}</p>
+                    <p><strong>Details:</strong> {{ result.error }}</p>
                      {% if result.explanation_detail %}
-                        <pre>{{ result.explanation_detail }}</pre>
+                        <pre class="explanation-text">{{ result.explanation_detail }}</pre>
                     {% endif %}
                 {% endif %}
             </div>
         {% endif %}
 
-        <p style="text-align:center; margin-top:20px;"><a href="/">Upload another image</a></p>
+        <p class="text-center mt-30">
+            <a href="/" class="button-style">Upload another image</a>
+        </p>
     </div>
 </body>
 </html>
