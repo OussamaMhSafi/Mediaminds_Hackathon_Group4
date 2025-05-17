@@ -15,10 +15,10 @@ nest_asyncio
 notebook
 huawei-obs
 python-multipart
-pyppeteer==1.0.0
 sentence-transformers
 tavily-python
 wikipedia
 trustcall
+google-search-results
 langgraph-cli[inmem]
 serpapi

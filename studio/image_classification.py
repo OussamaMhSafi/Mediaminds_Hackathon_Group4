@@ -12,7 +12,7 @@ import os
 import uuid
 from collections import Counter
 import requests
-from serpapi import GoogleSearch
+from serpapi.google_search import GoogleSearch
 from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -440,7 +440,8 @@ def create_image_classification_graph():
         "describe_image",
         should_detect_deepfake,
         {
-            True: "detect_deepfake"
+            True: "detect_deepfake",
+            False: "classify_image"
         }
     )
     
