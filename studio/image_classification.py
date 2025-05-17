@@ -370,8 +370,8 @@ def classify_image(state):
     - AI generation likelihood: {ai_generated_likelihood * 100:.2f}%{deepfake_info}
     
     CRITICAL RULES:
-    - Reverse image search is the MOST IMPORTANT signal.
-    - If the number of visually similar images is less than 6 this could indicate fake news.
+    - Reverse image search is a very important signal.
+    - If the number of visually similar images is low, this could indicate fake news.
     - If the contents from the visual matches don't contain content similar to the image description, this is also likely to indicate fake news.
     - If contents mention "photoshopped", "not real", or similar phrases, that is strong evidence of fakery.
     - If AI generation likelihood is above 90%, consider this as strong evidence of potential fakery.

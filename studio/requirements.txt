@@ -13,6 +13,9 @@ langchain-ollama
 langchain-openai
 nest_asyncio
 notebook
+fastapi
+uvicorn
+dotenv
 huawei-obs
 python-multipart
 sentence-transformers

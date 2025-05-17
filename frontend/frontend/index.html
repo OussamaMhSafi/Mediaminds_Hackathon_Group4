@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Deepfake Image Detection</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <img src="logo.png" alt="Al Jazeera Logo" class="logo-left" />
+    <h1>Deepfake Image Detection</h1>
+    <img src="logo2.png" alt="Huawei Logo" class="logo-right" />
+  </header>
+
+  <!-- Quote -->
+  <section class="description">
+    <p class="animated-text">Where images meet facts — verified through AI and journalism.</p>
+  </section>
+
+  <!-- Upload & Preview -->
+  <div class="main">
+    <div class="upload-section" id="dropzone">
+      <div>
+        <p>Drag and drop an image here<br>or click to select</p>
+        <input type="file" id="fileInput" accept="image/*" />
+      </div>
+    </div>
+    <div class="preview-section">
+      <img id="preview" src="" alt="Image Preview" />
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="results">
+    <div id="resultOutput">
+      <h3>Classification Result:</h3>
+      <p id="classification" class="badge">–</p>
+      <p id="confidence">–</p>
+      <div id="explanationBox">
+        <h3>Explanation:</h3>
+        <p id="explanationText">–</p>
+    </div>
+
+    </div>
+    <div id="sources">
+      <h3>Sources:</h3>
+      <ul id="sourceList"></ul>
+    </div>
+  </div>
+
+  <!-- Loader Spinner -->
+  <div id="loader" class="loader hidden">
+    <div class="spinner"></div>
+    <p>Analyzing image...</p>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
