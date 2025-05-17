@@ -1,7 +1,6 @@
 # image_processing_utils.py (selected, adapted functions)
 # (Keep all your original imports: Dict, Any, Optional, etc.)
 from typing import Dict, Any, Optional, List, Literal, Annotated
-from typing_extensions import TypedDict
 from langchain_community.document_loaders import WebBaseLoader
 from pydantic import BaseModel, Field
 from enum import Enum
