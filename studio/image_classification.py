@@ -12,7 +12,7 @@ import os
 import uuid
 from collections import Counter
 import requests
-from serpapi import GoogleSearch
+from serpapi import search as GoogleSearch
 from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
