@@ -12,7 +12,7 @@ import os
 import uuid
 from collections import Counter
 import requests
-from serpapi import search as GoogleSearch
+from serpapi import GoogleSearch
 from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -33,7 +33,6 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_community.tools import TavilySearchResults
 
 from langgraph.graph import START, END, StateGraph
-from langgraph.prebuilt import ToolNode
 
 class Decision(BaseModel):
     classification: Literal["REAL", "FAKE"]
@@ -209,7 +208,6 @@ def check_deepfake(url: str) -> Dict[str, Any]:
         }    
     
 def describe_image(state):
-
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
     
     # Get the base64 image from state
@@ -242,67 +240,41 @@ def describe_image(state):
     
     # Invoke the model directly with the messages
     response = llm.invoke(messages)
+    description = response.content
     
-    return {"description": response.content}
-
-def detect_deepfake(state):
-
-    description = state.get("description", "")
-    image_url = state.get("obs_url", "")
-    
-    # Create LLM with the deepfake detection tool
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    llm_with_tools = llm.bind_tools([check_deepfake])
-    
-    # Create a prompt to analyze the description and conditionally use the deepfake tool
-    messages = [
-        SystemMessage(content="""You are an AI assistant that analyzes image descriptions.
-        If the description indicates the image is a portrait of a single person or a close-up of a face, 
-        use the check_deepfake tool to determine if it's a deepfake.
-        
-        DO NOT use the tool for:
-        - Images with multiple people
-        - Landscape photos
-        - Objects or scenes without prominent human faces
-        - Any non-portrait images
-        
-        Only use the tool when you're confident the image contains a single close-up face."""),
-        HumanMessage(content=f"""
-        Image Description: {description}
-        
-        Image URL: {image_url}
-        
-        First, determine if this is a portrait of a single person or a close-up of a face.
-        If it is, use the check_deepfake tool to analyze it.
-        If it's not a portrait or face close-up, simply respond "Not a portrait image."
-        """)
+    # Now determine if it's a portrait
+    portrait_messages = [
+        SystemMessage(content="""You are an AI assistant that determines if an image is a portrait.
+        A portrait is defined as an image primarily featuring a single person's face or upper body.
+        You should answer with just 'YES' if it's a portrait, or 'NO' if it's not."""),
+        HumanMessage(content=f"Based on this description, is the image a portrait of a single person? Description: {description}")
     ]
     
-    # Invoke the LLM with tools
-    response = llm_with_tools.invoke(messages)
-    
-    # Default values
-    is_portrait = False
-    deepfake_likelihood = 0.0
-    
-    # Check for tool calls in the response
-    tool_calls = getattr(response, "tool_calls", [])
-    for tool_call in tool_calls:
-        if tool_call.get("name") == "check_deepfake":
-            is_portrait = True
-            # Parse the tool output if available
-            try:
-                output = tool_call.get("output", "{}")
-                result = json.loads(output) if isinstance(output, str) else output
-                if result.get("success", False):
-                    deepfake_likelihood = result.get("deepfake_likelihood", 0.0)
-            except Exception as e:
-                print(f"Error parsing deepfake tool result: {str(e)}")
+    portrait_response = llm.invoke(portrait_messages)
+    is_portrait = "YES" in portrait_response.content.upper()
     
     return {
-        "is_portrait": is_portrait,
+        "description": description,
+        "is_portrait": is_portrait
+    }
+
+def detect_deepfake(state):
+    image_url = state.get("obs_url", "")
+    
+    try:
+        deepfake_result = check_deepfake(image_url)
+        deepfake_likelihood = deepfake_result.get("deepfake_likelihood", 0.0)
+    except Exception as e:
+        print(f"Error in deepfake detection: {str(e)}")
+        deepfake_likelihood = 0.0
+    
+    return {
         "deepfake_likelihood": deepfake_likelihood
     }
+
+def should_detect_deepfake(state):
+    """Determines if deepfake detection should be performed based on whether the image is a portrait."""
+    return state.get("is_portrait", False)
 
         
 def load_webpage_content(url: str) -> str:
@@ -458,14 +430,25 @@ def create_image_classification_graph():
     workflow.add_edge(START, "initialize")
     workflow.add_edge("initialize", "load_image")    
     workflow.add_edge("load_image", "describe_image")
-    workflow.add_edge("describe_image", "detect_deepfake")
-    workflow.add_edge("describe_image", "reverse_image_search")
     
-    # Add the parallel branch for AI detection
+    # Always run reverse_image_search and ai_detect
+    workflow.add_edge("describe_image", "reverse_image_search")
     workflow.add_edge("load_image", "ai_detect")
     
-    # Converge all branches at classify_image
-    workflow.add_edge(["ai_detect", "reverse_image_search", "detect_deepfake"], "classify_image")
+    # Conditional edge for deepfake detection
+    workflow.add_conditional_edges(
+        "describe_image",
+        should_detect_deepfake,
+        {
+            True: "detect_deepfake"
+        }
+    )
+    
+    # Connect from detect_deepfake to classify_image
+    workflow.add_edge("detect_deepfake", "classify_image")
+    
+    # Connect remaining parallel branches to classify_image
+    workflow.add_edge(["ai_detect", "reverse_image_search"], "classify_image")
     
     workflow.add_edge("classify_image", END)
     
