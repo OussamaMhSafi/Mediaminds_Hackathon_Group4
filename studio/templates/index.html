@@ -141,10 +141,8 @@
 <body>
 
     <header>
-        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo Left" class="logo" />
-        <h1 class="site-title">Deepfake Image Detection</h1>
-        <img src="{{ url_for('static', filename='logo2.png') }}" alt="Logo Right" class="logo" />    
-    </header>
+        <img src="{{ url_for('static', path='logo.png') }}" alt="Logo Left" class="logo" />
+        <img src="{{ url_for('static', path='logo2.png') }}" alt="Logo Right" class="logo" />    </header>
 
     <section class="description-bar">
         <p>Where images meet facts — verified through AI and journalism.</p>
