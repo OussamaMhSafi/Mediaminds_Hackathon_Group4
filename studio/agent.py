@@ -24,9 +24,6 @@ from new_utils import (
 import json
 # Load environment variables (ensure you have .env file or vars are set)
 load_dotenv()
-# Required: OPENAI_API_KEY, AccessKeyID, SecretAccessKey, SIGHTENGINE_API_USER, SIGHTENGINE_API_SECRET, SERPAPI_API_KEY
-
-# --- Agent Tools ---
 
 @tool
 def get_initial_image_analysis(image_path: str) -> Dict[str, Any]:
