@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Classification Result (Modular)</title>
+     <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 800px; margin: auto; }
+        h1, h2 { color: #333; border-bottom: 1px solid #eee; padding-bottom: 10px;}
+        .result-section { margin-bottom: 25px; padding: 15px; background-color: #f9f9f9; border-radius: 4px; }
+        .result-label { font-weight: bold; color: #555; }
+        .classification-REAL { color: green; font-weight: bold; font-size: 1.3em; }
+        .classification-FAKE { color: red; font-weight: bold; font-size: 1.3em; }
+        .classification-UNKNOWN { color: orange; font-weight: bold; font-size: 1.3em; }
+        pre { background-color: #eee; padding: 15px; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; font-size: 0.95em; line-height: 1.6; }
+        img.uploaded-image { max-width: 100%; height: auto; border: 1px solid #ddd; margin-top: 10px; border-radius: 4px; display: block; margin-left: auto; margin-right: auto; max-height: 400px;}
+        .error-message { color: #D8000C; background-color: #FFD2D2; padding:10px; border-radius:4px; font-weight: bold;}
+        .traceback { font-size: 0.8em; color: #555; white-space: pre-wrap; max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 5px;}
+        ul { list-style-type: disc; padding-left: 20px; }
+        li { margin-bottom: 5px; }
+        a { color: #007bff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .details-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
+        .detail-item p { margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Classification Result</h1>
+
+        {% if error %}
+            <div class="result-section">
+                <h2 class="error-message">An Error Occurred</h2>
+                <p>{{ error }}</p>
+                {% if full_trace %}
+                    <h3>Traceback (for debugging):</h3>
+                    <pre class="traceback">{{ full_trace }}</pre>
+                {% endif %}
+            </div>
+        {% elif result and result.classification %}
+            <div class="result-section">
+                <h2>Overall Decision</h2>
+                <p><span class="result-label">Classification:</span> <span class="classification-{{ result.classification }}">{{ result.classification }}</span></p>
+                <p><span class="result-label">Confidence:</span> {{ result.confidence }}%</p>
+                <p><span class="result-label">Explanation:</span></p>
+                <pre>{{ result.explanation }}</pre>
+                {% if result.sources and result.sources|length > 0 %}
+                    <p><span class="result-label">Evidence Sources:</span></p>
+                    <ul>
+                        {% for source_url_item in result.sources %}
+                            <li><a href="{{ source_url_item }}" target="_blank" rel="noopener noreferrer">{{ source_url_item }}</a></li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+
+            {% if obs_url %}
+            <div class="result-section">
+                <h2>Uploaded Image</h2>
+                <img src="{{ obs_url }}" alt="Uploaded Image" class="uploaded-image">
+            </div>
+            {% endif %}
+
+            <div class="result-section">
+                <h2>Analysis Breakdown</h2>
+                <div class="details-grid">
+                    <div class="detail-item">
+                        <p><span class="result-label">Image Description (AI):</span></p>
+                        <pre>{{ image_description | default('N/A') }}</pre>
+                    </div>
+                    <div class="detail-item">
+                         <p><span class="result-label">AI Generated Likelihood:</span> {{ "%.2f"|format(ai_likelihood * 100 if ai_likelihood is not none else 0) }}%</p>
+                        {% if is_portrait %}
+                             <p><span class="result-label">Deepfake Likelihood (Portrait):</span> {{ "%.2f"|format(deepfake_likelihood * 100 if deepfake_likelihood is not none else 0) }}%</p>
+                        {% else %}
+                             <p><span class="result-label">Deepfake Detection:</span> Not a portrait / check not performed / or error.</p>
+                        {% endif %}
+                        <p><span class="result-label">Similar Images Found (Reverse Search):</span> {{ similar_images_count if similar_images_count is not none else 'N/A' }}</p>
+                    </div>
+                </div>
+            </div>
+
+        {% else %}
+             <div class="result-section">
+                <h2 class="error-message">Classification Result Not Available</h2>
+                <p>The classification process did not produce a valid decision. Please check server logs for details.</p>
+                {% if result and result.error %}
+                    <p>Details: {{ result.error }}</p>
+                     {% if result.explanation_detail %}
+                        <pre>{{ result.explanation_detail }}</pre>
+                    {% endif %}
+                {% endif %}
+            </div>
+        {% endif %}
+
+        <p style="text-align:center; margin-top:20px;"><a href="/">Upload another image</a></p>
+    </div>
+</body>
+</html>
