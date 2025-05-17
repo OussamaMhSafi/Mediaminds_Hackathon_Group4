@@ -10,7 +10,7 @@ from fastapi import FastAPI, File, UploadFile, Request, Form, HTTPException, sta
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 # from fastapi.staticfiles import StaticFiles # Uncomment if you add a static folder for CSS/JS
-
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 # --- Load Environment Variables FIRST ---
@@ -33,6 +33,7 @@ except ImportError as e:
 
 # --- FastAPI App Setup ---
 app = FastAPI(title="Image Classifier API")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Setup for templates
 BASE_DIR = Path(__file__).resolve().parent
