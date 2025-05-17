@@ -44,7 +44,7 @@ function uploadToBackend(file) {
   formData.append("file", file); 
 
 
-  fetch("http://localhost:8000/analyze/", {
+  fetch("http://159.138.86.55/:8000/analyze/", {
     method: "POST",
     body: formData
   })
