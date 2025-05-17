@@ -141,9 +141,9 @@
 <body>
 
     <header>
-        <img src="logo.png" alt="Logo Left" class="logo" /> <!-- Assuming logo.png -->
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo Left" class="logo" />
         <h1 class="site-title">Deepfake Image Detection</h1>
-        <img src="logo2.png" alt="Logo Right" class="logo" /> <!-- Assuming logo2.png -->
+        <img src="{{ url_for('static', filename='logo2.png') }}" alt="Logo Right" class="logo" />
     </header>
 
     <section class="description-bar">
