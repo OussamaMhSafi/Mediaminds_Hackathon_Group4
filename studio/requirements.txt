@@ -22,3 +22,4 @@ trustcall
 google-search-results
 langgraph-cli[inmem]
 serpapi
+fastapi uvicorn[standard]
