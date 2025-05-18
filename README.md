@@ -8,7 +8,7 @@
 
 This is the codebase for the Solution of GroupD as part of the Mediaminds hackathon organised by Huawei Cloud and Aljazeera. The solution utilises Huawei cloud technologies (OBS bucker, ECS) for storage and hosting toghether with langchain for multiagent architecture.
 
-Our team received second place in the hackthon.
+Our team received second place in the hackathon.
 
 ## Setup Instructions to Run the Langgraph Graph locally
 
