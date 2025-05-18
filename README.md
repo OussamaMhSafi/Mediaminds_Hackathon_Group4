@@ -49,65 +49,20 @@ pip install -r requirements.txt
 
 ## Testing Using LangChain
 
-1. Create a virtual environment:
-```python
-py -3.11 -m venv lg-env
-```
-
-2. Activate the virtual environment:
-
-**Linux/git bash:**
-```
-source lg-env/Scripts/activate
-```
-
-3. Enter Studio Directory:
-```bash
-cd studio
-```
-
-4. Install dependencies:
+1. In /studio
 ```bash
 langgraph dev
 ```
 
 ## Testing Using FastAPI (locally)
 
-1. Create a virtual environment:
-```python
-py -3.11 -m venv lg-env
-```
-
-2. Activate the virtual environment:
-
-**Linux/git bash:**
-```
-source lg-env/Scripts/activate
-```
-
-3. Enter Studio Directory:
-```bash
-cd studio
-```
-
-4. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-5. Go Back to Main Folder:
-
-```bash
-cd ..
-```
-
-5. Run Backend:
+1. Run Backend:
 
 ```bash
 uvicorn serve:app --reload
 ```
 
-6. Run Frontend (on another terminal) and go to localhost:8080:
+2. Run Frontend (on another terminal) and go to localhost:8080:
 
 ```bash
 cd frontent/frontend
