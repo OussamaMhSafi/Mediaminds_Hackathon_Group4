@@ -122,48 +122,61 @@ header h1 {
   object-fit: contain;
 }
 
-/* Results Section */
+/* Results Section - Updated for simplified display */
 .results {
   display: flex;
-  justify-content: space-around;
+  justify-content: center;
   padding: 20px;
-  background-color: #fdf6ec; /* beige */
+  background-color: #fdf6ec;
   border-top: 1px solid #e0e0e0;
   box-sizing: border-box;
   width: 100%;
-  flex-wrap: wrap;
 }
 
+#resultOutput {
+  width: 80%;
+  max-width: 800px;
+}
 
 .results h3 {
   font-size: 20px;
   color: #333;
-  margin-bottom: 8px;
+  margin-bottom: 15px;
+  text-align: center;
 }
 
-.badge {
-  display: inline-block;
-  padding: 6px 12px;
-  border-radius: 12px;
+#reasoningBox {
+  background-color: white;
+  border-radius: 8px;
+  padding: 25px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  margin-bottom: 20px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#reasoningText {
   font-size: 16px;
-  font-weight: bold;
-  background-color: #ffe1cc;
-  color: #d35400;
-  margin-top: 4px;
-}
-
-#confidence {
-  font-size: 16px;
-  color: #444;
-  margin: 4px 0;
-}
-
-#sourceList {
-  font-size: 14px;
-  padding-left: 20px;
-  max-height: 100px;
-  overflow-y: auto;
+  line-height: 1.6;
   color: #333;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+#reasoningText a {
+  color: #0066cc;
+  text-decoration: underline;
+  transition: color 0.2s;
+  word-break: break-all;
+}
+
+#reasoningText a:hover {
+  color: #004499;
+  text-decoration: underline;
+}
+
+#reasoningText strong {
+  font-weight: 600;
 }
 
 input[type="file"] {
@@ -208,4 +221,10 @@ input[type="file"] {
   font-size: 16px;
   color: #333;
   font-weight: 500;
+}
+
+/* For hover effect */
+.upload-section.hover {
+  background-color: #ffecb3;
+  border-color: #e4932a;
 }

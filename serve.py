@@ -12,7 +12,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # allow requests from your local frontend
+    allow_origins=["*"],  # Allow requests from anywhere during development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -26,13 +26,16 @@ async def analyze(file: UploadFile = File(...)):
             shutil.copyfileobj(file.file, f)
 
         result = graph.invoke({"image": temp_path})
-        print("🧠 FINAL RESULT:", result)  # <== keep this too
-
+        print("🧠 FINAL RESULT:", result)  # Keep this for debugging
+        
+        simplified_response = {
+            "agent_reasoning": result.get("agent_reasoning", "No reasoning available")
+        }
+        
         os.remove(temp_path)
-        return JSONResponse(content=result)
+        return JSONResponse(content=simplified_response)
 
     except Exception as e:
         print("❌ ERROR during graph processing:")
-        traceback.print_exc()  # <== 👈 this will show exact line and reason
+        traceback.print_exc()  # This will show exact line and reason for the error
         return JSONResponse(status_code=500, content={"error": str(e)})
-

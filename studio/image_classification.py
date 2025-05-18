@@ -20,19 +20,13 @@ from langchain_core.runnables import RunnablePassthrough, RunnableConfig
 from langchain_core.output_parsers import StrOutputParser
 import json
 import traceback
-
-# Import Huawei OBS
 from obs import ObsClient
-
-# Import Ollama integration
 from langchain_ollama import OllamaLLM
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage
-
-# Import search tools
 from langchain_community.tools import TavilySearchResults
-
 from langgraph.graph import START, END, StateGraph
+from langchain.agents import AgentExecutor, create_openai_functions_agent
 
 class Decision(BaseModel):
     classification: Literal["REAL", "FAKE"]
@@ -58,16 +52,16 @@ class ImageClassificationState(TypedDict):
     ai_generated_likelihood: float  # Likelihood of AI generation from SightEngine
     deepfake_likelihood: float  # Likelihood of deepfake from SightEngine
     is_portrait: bool  # Whether the image is a portrait
+    agent_reasoning: Optional[str]  # Store agent's reasoning process
+
 
 def load_image(state):
-    # Get the local file path
+
     image_path = state["image"]
     
     try:
-        # Load the image from the local path
+
         image = Image.open(image_path)
-        
-        # Convert to base64 for internal use
         buffered = BytesIO()
         image.save(buffered, format=image.format or "JPEG")
         img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
@@ -80,7 +74,7 @@ def load_image(state):
         
         # Create a unique objectKey using UUID and original filename
         file_name = os.path.basename(image_path)
-        unique_id = str(uuid.uuid4())[:8]  # Use first 8 chars of UUID for brevity
+        unique_id = str(uuid.uuid4())[:8]
         object_key = f"images/{unique_id}_{file_name}"
         
         # Upload to Huawei OBS
@@ -104,7 +98,7 @@ def load_image(state):
                 "format": image.format,
                 "path": image_path
             },
-            "obs_url": public_url  # Store the public URL
+            "obs_url": public_url
         }
     
     except Exception as e:
@@ -114,54 +108,167 @@ def load_image(state):
             "image_data": {
                 "success": False,
                 "error": str(e),
-                "image_data": "",  # Empty string instead of None
+                "image_data": "",
                 "width": 0,
                 "height": 0,
                 "format": None,
                 "path": image_path
             },
-            "obs_url": ""  # Empty URL on failure
+            "obs_url": "" 
         }
 
-def detect_ai_generation(state):
-    try:
-        # Get the local file path
-        image_path = state["image"]
+
+# Tool 1: Analyze image for content and portrait detection
+@tool
+def analyze_image_description(image_base64: str, image_url: str = None) -> Dict[str, Any]:
+    """
+    Analyzes an image to provide a detailed description and determines if it's a portrait.
+    
+    Args:
+        image_base64: Base64-encoded image data
+        image_url: Alternative URL of the image if base64 fails
         
+    Returns:
+        Dictionary with description and portrait detection result
+    """
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    
+    if image_base64 and len(image_base64) > 100:  
+        if "base64," in image_base64:
+            image_base64 = image_base64.split("base64,")[1]
+        
+        # Create messages with the properly formatted base64 image
+        messages = [
+            SystemMessage(content="You are an AI assistant that provides detailed descriptions of images."),
+            HumanMessage(content=[
+                {
+                    "type": "text",
+                    "text": """Focus on key elements that can be verified:
+                    - People or notable figures in the image and their names
+                    - Location and setting
+                    - Any visible text or signs
+                    - Events or activities depicted
+                    - Distinctive objects or landmarks
+                    - Approximate time period or date indicators
+                    
+                    Please provide a detailed factual description of this image:"""
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{image_base64}"
+                    }
+                }
+            ])
+        ]
+    elif image_url:
+        # Fallback to using the image URL if base64 is unavailable
+        messages = [
+            SystemMessage(content="You are an AI assistant that provides detailed descriptions of images."),
+            HumanMessage(content=[
+                {
+                    "type": "text",
+                    "text": """Focus on key elements that can be verified:
+                    - People or notable figures in the image and their names
+                    - Location and setting
+                    - Any visible text or signs
+                    - Events or activities depicted
+                    - Distinctive objects or landmarks
+                    - Approximate time period or date indicators
+                    
+                    Please provide a detailed factual description of this image:"""
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_url
+                    }
+                }
+            ])
+        ]
+    else:
+        return {
+            "error": "No valid image data provided",
+            "description": "Unable to analyze image: no valid image data provided",
+            "is_portrait": False
+        }
+    
+    try:
+        # Invoke the model directly with the messages
+        response = llm.invoke(messages)
+        description = response.content
+        
+        # Now determine if it's a portrait
+        portrait_messages = [
+            SystemMessage(content="""You are an AI assistant that determines if an image is a portrait.
+            A portrait is defined as an image primarily featuring a single person's face or upper body.
+            Be flexible in your conclusion of what constitutes a portrait.
+            You should answer with just 'YES' if it's a portrait, or 'NO' if it's not."""),
+            HumanMessage(content=f"Based on this description, is the image a portrait of a single person? Description: {description}")
+        ]
+        
+        portrait_response = llm.invoke(portrait_messages)
+        is_portrait = "YES" in portrait_response.content.upper()
+        
+        return {
+            "description": description,
+            "is_portrait": is_portrait
+        }
+    except Exception as e:
+        print(f"Error in image analysis: {str(e)}")
+        return {
+            "error": str(e),
+            "description": "Error analyzing image",
+            "is_portrait": False
+        }
+
+
+# Tool 2: Check if image was AI-generated
+@tool
+def check_ai_generation(image_path: str) -> Dict[str, Any]:
+    """
+    Checks if an image was likely generated by AI using SightEngine API.
+    
+    Args:
+        image_path: Local file path to the image
+        
+    Returns:
+        Dictionary with AI generation likelihood score
+    """
+    try:
         # SightEngine API configuration
         params = {
             'models': 'genai',
-            'api_user': '1614642259',  # Add your API user
-            'api_secret': 'XkWh5ceXBK9dL9bR6YRemnwCsUv6oTRw'  # Add your API secret
+            'api_user': os.getenv("SightengineUserKey"),
+            'api_secret': os.getenv("SightengineSecretKey") 
         }
         
-        # Open and send the file
         files = {'media': open(image_path, 'rb')}
         response = requests.post('https://api.sightengine.com/1.0/check.json', 
-                                files=files, 
-                                data=params)
+                               files=files, 
+                               data=params)
         
-        # Parse the response
         result = json.loads(response.text)
         
-        # Check if the API call was successful
         if result.get('status') == 'success':
             ai_likelihood = result.get('type', {}).get('ai_generated', 0.0)
+            return {
+                "ai_generated_likelihood": ai_likelihood
+            }
         else:
-            ai_likelihood = 0.0
-            print(f"SightEngine API error: {result}")
-        
-        return {
-            "ai_generated_likelihood": ai_likelihood
-        }
+            return {
+                "error": f"SightEngine API error: {result}",
+                "ai_generated_likelihood": 0.0
+            }
         
     except Exception as e:
         print(f"Error in AI generation detection: {str(e)}")
         return {
-            "ai_generated_likelihood": 0.0  # Default to 0 on error
+            "error": str(e),
+            "ai_generated_likelihood": 0.0 
         }
-    
-# Define the deepfake detection tool
+
+
 @tool
 def check_deepfake(url: str) -> Dict[str, Any]:
     """
@@ -178,8 +285,8 @@ def check_deepfake(url: str) -> Dict[str, Any]:
         params = {
             'url': url,
             'models': 'deepfake',
-            'api_user': '1614642259',  # Add your API user
-            'api_secret': 'XkWh5ceXBK9dL9bR6YRemnwCsUv6oTRw'  # Add your API secret
+            'api_user': os.getenv("SightengineUserKey"),
+            'api_secret': os.getenv("SightengineSecretKey")
         }
         
         response = requests.get('https://api.sightengine.com/1.0/check.json', params=params)
@@ -205,115 +312,48 @@ def check_deepfake(url: str) -> Dict[str, Any]:
             "success": False,
             "error": str(e),
             "deepfake_likelihood": 0.0
-        }    
-    
-def describe_image(state):
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    
-    # Get the base64 image from state
-    image_base64 = state["image_data"]["image_data"]
-    
-    # Create messages with the image directly for OpenAI
-    messages = [
-        SystemMessage(content="You are an AI assistant that provides detailed descriptions of images."),
-        HumanMessage(content=[
-            {
-                "type": "text",
-                "text": """Focus on key elements that can be verified:
-                - People or notable figures in the image and their names
-                - Location and setting
-                - Any visible text or signs
-                - Events or activities depicted
-                - Distinctive objects or landmarks
-                - Approximate time period or date indicators
-                
-                Please provide a detailed factual description of this image:"""
-            },
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{image_base64}"
-                }
-            }
-        ])
-    ]
-    
-    # Invoke the model directly with the messages
-    response = llm.invoke(messages)
-    description = response.content
-    
-    # Now determine if it's a portrait
-    portrait_messages = [
-        SystemMessage(content="""You are an AI assistant that determines if an image is a portrait.
-        A portrait is defined as an image primarily featuring a single person's face or upper body.
-        You should answer with just 'YES' if it's a portrait, or 'NO' if it's not."""),
-        HumanMessage(content=f"Based on this description, is the image a portrait of a single person? Description: {description}")
-    ]
-    
-    portrait_response = llm.invoke(portrait_messages)
-    is_portrait = "YES" in portrait_response.content.upper()
-    
-    return {
-        "description": description,
-        "is_portrait": is_portrait
-    }
+        }
 
-def detect_deepfake(state):
-    image_url = state.get("obs_url", "")
-    
-    try:
-        deepfake_result = check_deepfake(image_url)
-        deepfake_likelihood = deepfake_result.get("deepfake_likelihood", 0.0)
-    except Exception as e:
-        print(f"Error in deepfake detection: {str(e)}")
-        deepfake_likelihood = 0.0
-    
-    return {
-        "deepfake_likelihood": deepfake_likelihood
-    }
 
-def should_detect_deepfake(state):
-    """Determines if deepfake detection should be performed based on whether the image is a portrait."""
-    return state.get("is_portrait", False)
-
+# Tool 4: Perform reverse image search
+@tool
+def perform_reverse_image_search(image_url: str) -> Dict[str, Any]:
+    """
+    Performs reverse image search using Google Lens via SerpAPI.
+    
+    Args:
+        image_url: URL of the image to search
         
-def load_webpage_content(url: str) -> str:
-    try:
-        loader = WebBaseLoader(url)
-        documents = loader.load()
-        content = "\n\n".join([doc.page_content for doc in documents])
-        return content[:10000]  # Limit content size
-    except Exception as e:
-        return f"Error loading webpage: {e}"
-
-def reverse_image_search(state):
-    # Use the OBS URL for reverse image search instead of local path
-    image_url = state["obs_url"]
-    
+    Returns:
+        Dictionary with search results including similar images and their contents
+    """
     try:
         # Perform reverse image search using SerpAPI directly with the provided URL
         params = {
             "engine": "google_lens",
             "url": image_url,
-            "api_key": "c8c0a3f93eb0b6660ec0a33251fd4b61ecf4c6eec271c877997813fbca69a231"
+            "api_key": os.getenv("SerpAPIKey"),
         }
         
         search = GoogleSearch(params)
         results = search.get_dict()
         
-        visual_matches = results["visual_matches"]
+        visual_matches = results.get("visual_matches", [])
         similar_images_count = len(visual_matches)
         
         # Get top 10 visual match URLs
-        top_matches = visual_matches[:10] if similar_images_count >= 10 else visual_matches
+        top_matches = visual_matches[:5] if similar_images_count >= 5 else visual_matches
         visual_match_urls = [match.get("link", "") for match in top_matches]
         
-        # Get content from the top visual match URLs
+        # Web scrape from the top visual match URLs
         visual_match_contents = []
         for url in visual_match_urls:
             if url:
                 try:
-                    loader = WebBaseLoader(url)
+                    loader = WebBaseLoader(
+                        url,
+                        requests_kwargs={"timeout": 10}
+                    )
                     documents = loader.load()
                     content = "\n\n".join([doc.page_content for doc in documents])
                     visual_match_contents.append(f"Source ({url}):\n{content[:5000]}...") 
@@ -331,22 +371,46 @@ def reverse_image_search(state):
     except Exception as e:
         # Return empty results with error information if the search fails
         return {
+            "error": str(e),
             "similar_images_count": 0,
             "visual_match_urls": [],
             "visual_match_contents": [f"Error performing reverse image search: {str(e)}"]
         }
 
-def classify_image(state):
+
+# Tool 5: Make final classification
+@tool
+def make_classification_decision(
+    description: str, 
+    similar_images_count: int,
+    visual_match_urls: List[str],
+    visual_match_contents: List[str],
+    ai_generated_likelihood: float,
+    is_portrait: bool,
+    deepfake_likelihood: float = 0.0
+) -> Dict[str, Any]:
+    """
+    Makes a final determination if an image is real or fake based on all evidence.
+    
+    Args:
+        description: Description of the image
+        similar_images_count: Number of similar images found
+        visual_match_urls: URLs of similar images
+        visual_match_contents: Contents of websites with similar images
+        ai_generated_likelihood: Likelihood the image was AI-generated (0-1)
+        is_portrait: Whether the image is a portrait
+        deepfake_likelihood: Likelihood of deepfake if portrait (0-1)
+        
+    Returns:
+        Dictionary with classification decision
+    """
+
     result_dict = {}
 
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-
-    similar_images_count = state.get("similar_images_count", 0)
-    visual_match_contents = "\n".join(state.get("visual_match_contents", []))
-    ai_generated_likelihood = state.get("ai_generated_likelihood", 0.0)
-    is_portrait = state.get("is_portrait", False)
-    deepfake_likelihood = state.get("deepfake_likelihood", 0.0)
-
+    
+    visual_match_contents_str = "\n".join(visual_match_contents[:3])  # Limit to first 3 for prompt size
+    
     # Prepare deepfake information for the prompt
     deepfake_info = ""
     if is_portrait:
@@ -358,13 +422,13 @@ def classify_image(state):
     You are an image verification specialist. Your task is to determine whether the provided image is part of a real-world event or a fake/edited scene.
 
     IMAGE DESCRIPTION:
-    {state["description"]}
+    {description}
     
     REVERSE IMAGE SEARCH RESULTS:
     - Number of visually similar images found: {similar_images_count}
-    - Visual match URLs: {', '.join(state.get('visual_match_urls', []))}
+    - Visual match URLs: {', '.join(visual_match_urls)}
     - Visual match contents:
-    {visual_match_contents}
+    {visual_match_contents_str}
     
     IMAGE ANALYSIS:
     - AI generation likelihood: {ai_generated_likelihood * 100:.2f}%{deepfake_info}
@@ -377,9 +441,9 @@ def classify_image(state):
     - If AI generation likelihood is above 90%, consider this as strong evidence of potential fakery.
     - If the image is a portrait and deepfake likelihood is above 80%, consider this strong evidence of fakery.
 
-    Format:
+    Format your response exactly as follows:
     CLASSIFICATION: [REAL or FAKE]
-    CONFIDENCE: [0-100]
+    CONFIDENCE: [LOW, MEDIUM, HIGH]
     EXPLANATION: [Detailed justification with evidence]
     """
 
@@ -408,52 +472,114 @@ def classify_image(state):
         classification=classification,
         confidence=confidence,
         explanation=explanation,
-        sources=state["sources"] + state.get("visual_match_urls", [])
+        sources=visual_match_urls
     )
+
 
     result_dict["decision"] = decision.model_dump()
     return result_dict
 
+
+# Define the agent node that will decide which tools to use
+def agent_node(state: ImageClassificationState) -> ImageClassificationState:
+    
+    # Create an agent with the tools
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    
+    # Define the tools the agent can use
+    tools = [
+        analyze_image_description,
+        check_ai_generation,
+        check_deepfake,
+        perform_reverse_image_search,
+        make_classification_decision
+    ]
+    
+    # Create the agent prompt with explicit instructions
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """You are an image verification agent. Your task is to determine if an image is real or fake by using the appropriate tools.
+
+        Follow this exact process:
+        1. Analyze the image using analyze_image_description to get a detailed description and determine if it's a portrait
+        - If analyzing with base64 fails, use the image_url as a fallback
+        2. ALWAYS check if the image was AI-generated using check_ai_generation
+        3. ALWAYS perform a reverse image search using perform_reverse_image_search
+        4. ONLY if the image is a portrait, check for deepfakes using check_deepfake
+        5. Make a final classification based on all the evidence using make_classification_decision
+
+        IMPORTANT: When calling analyze_image_description, pass both the image_base64 AND the image_url as parameters to ensure successful analysis if one method fails."""),
+                ("human", """I need to verify if this image is real or fake. 
+        Image path: {image_path}
+        Image URL: {image_url}
+
+        Please analyze this image and determine if it's real or fake following the process I described. 
+        Provide me with a detailed explanation of your reasoning and the URLs from the reverse image search you used to arrive at your conclusion.
+        Only return the final classification, confidence, explanation, and sources.
+        Don't describe the sources as "soruces from reverse image search", just describe them as "sources."""),
+        ("ai", "{agent_scratchpad}")
+    ])
+    
+    # Create the agent
+    agent = create_openai_functions_agent(llm, tools, prompt)
+    
+    # Create the agent executor
+    agent_executor = AgentExecutor(
+        agent=agent,
+        tools=tools,
+        verbose=True,
+        handle_parsing_errors=True
+    )
+    
+    # Execute the agent
+    result = agent_executor.invoke({
+        "image_path": state["image"],
+        "image_url": state["obs_url"],
+        "image_base64": state["image_data"]["image_data"]
+    })
+    
+    # Record the agent's reasoning
+    state["agent_reasoning"] = result.get("output", "")
+    
+    # Update state with all the tools' results
+    if "description" in result:
+        state["description"] = result["description"]
+    
+    if "is_portrait" in result:
+        state["is_portrait"] = result["is_portrait"]
+    
+    if "ai_generated_likelihood" in result:
+        state["ai_generated_likelihood"] = result["ai_generated_likelihood"]
+    
+    if "deepfake_likelihood" in result:
+        state["deepfake_likelihood"] = result["deepfake_likelihood"]
+    
+    if "similar_images_count" in result:
+        state["similar_images_count"] = result["similar_images_count"]
+    
+    if "visual_match_urls" in result:
+        state["visual_match_urls"] = result["visual_match_urls"]
+    
+    if "visual_match_contents" in result:
+        state["visual_match_contents"] = result["visual_match_contents"]
+    
+    if "decision" in result:
+        state["decision"] = result["decision"]
+    
+    return state
+
+
 def create_image_classification_graph():
     workflow = StateGraph(ImageClassificationState)
     
-    # Add nodes
-    workflow.add_node("initialize", lambda state: state)
+    workflow.add_node("initialize", lambda state: {"sources": [], "visual_match_urls": [], "visual_match_contents": []})
     workflow.add_node("load_image", load_image)
-    workflow.add_node("describe_image", describe_image)
-    workflow.add_node("detect_deepfake", detect_deepfake)
-    workflow.add_node("reverse_image_search", reverse_image_search)
-    workflow.add_node("ai_detect", detect_ai_generation)
-    workflow.add_node("classify_image", classify_image)
-    
-    # Define the edges
+    workflow.add_node("agent", agent_node)
     workflow.add_edge(START, "initialize")
-    workflow.add_edge("initialize", "load_image")    
-    workflow.add_edge("load_image", "describe_image")
+    workflow.add_edge("initialize", "load_image")
+    workflow.add_edge("load_image", "agent")
+    workflow.add_edge("agent", END)
     
-    # Always run reverse_image_search and ai_detect
-    workflow.add_edge("describe_image", "reverse_image_search")
-    workflow.add_edge("load_image", "ai_detect")
-    
-    # Conditional edge for deepfake detection
-    workflow.add_conditional_edges(
-        "describe_image",
-        should_detect_deepfake,
-        {
-            True: "detect_deepfake",
-            False: "classify_image"
-        }
-    )
-    
-    # Connect from detect_deepfake to classify_image
-    workflow.add_edge("detect_deepfake", "classify_image")
-    
-    # Connect remaining parallel branches to classify_image
-    workflow.add_edge(["ai_detect", "reverse_image_search"], "classify_image")
-    
-    workflow.add_edge("classify_image", END)
-    
-    # Compile the graph
     return workflow.compile()
+
 
 graph = create_image_classification_graph()

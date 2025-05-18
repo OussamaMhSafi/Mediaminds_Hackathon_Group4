@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Deepfake Image Detection</title>
+  <title>Authentiq Eye</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -12,7 +12,7 @@
   <!-- Header -->
   <header>
     <img src="logo.png" alt="Al Jazeera Logo" class="logo-left" />
-    <h1>Deepfake Image Detection</h1>
+    <h1>Authentiq Eye</h1>
     <img src="logo2.png" alt="Huawei Logo" class="logo-right" />
   </header>
 
@@ -34,21 +34,13 @@
     </div>
   </div>
 
-  <!-- Results -->
+  <!-- Results - Simplified to only show agent reasoning -->
   <div class="results">
     <div id="resultOutput">
-      <h3>Classification Result:</h3>
-      <p id="classification" class="badge">–</p>
-      <p id="confidence">–</p>
-      <div id="explanationBox">
-        <h3>Explanation:</h3>
-        <p id="explanationText">–</p>
-    </div>
-
-    </div>
-    <div id="sources">
-      <h3>Sources:</h3>
-      <ul id="sourceList"></ul>
+      <h3>Analysis Result:</h3>
+      <div id="reasoningBox">
+        <p id="reasoningText">Upload an image to analyze</p>
+      </div>
     </div>
   </div>
 
