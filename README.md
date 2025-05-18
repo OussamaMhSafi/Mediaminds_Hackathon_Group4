@@ -6,9 +6,17 @@
 </p>
 
 
-This is the codebase for the Solution of GroupD as part of the Mediaminds hackathon organised by Huawei Cloud and Aljazeera. The solution utilises Huawei cloud technologies (OBS bucker, ECS) for storage and hosting toghether with langchain for multiagent architecture.
+Welcome to Authentiq Eye, our award-winning solution developed during the Mediaminds Hackathon, organized by Huawei Cloud and Al Jazeera. This innovative platform leverages Huawei Cloud technologies, specifically Object Storage Service (OBS) and Elastic Cloud Server (ECS), integrated with LangChain's multi-agent architecture for robust processing capabilities.
 
-Our team received second place in the hackathon.
+Our team addressed the critical challenge of detecting manipulated media content, including fake images, misleading news, and deepfake materials. 
+
+Authentiq Eye implements a sophisticated multi-tool single agent architecture that combines:
+- Web scraping for comprehensive content analysis
+- Reverse image search capabilities
+- AI-generated image detection
+- Advanced deepfake manipulation detection
+
+This solution earned second place recognition in the Mediaminds Hackathon, validating its effectiveness and innovation in combating digital misinformation.
 
 ## Setup Instructions to Run the Langgraph Graph locally
 
